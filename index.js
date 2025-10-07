@@ -30,13 +30,13 @@ app.post("/webhook", (req, res) => {
 
   let resposta = "";
 
-  if (message.toLowerCase().includes("oi")) {
-    resposta = "👋 Hmph! Miserável, aqui é o Vegeta, seu bot financeiro arrogante!";
+  if (message.toLowerCase().includes("Fala")) {
+    resposta = "👋 Hmph! Miserável, aqui é o Peartree, seu bot financeiro!";
   } 
   else if (message.toLowerCase().includes("saldo")) {
     resposta = `💰 Seu saldo atual é R$${saldo.toFixed(2)}... verme insolente!`;
   } 
-  else if (message.toLowerCase().includes("gastar")) {
+  else if (message.toLowerCase().includes("gastei")) {
     saldo -= 50; // exemplo fixo
     resposta = `😡 Você gastou R$50! Agora seu saldo é R$${saldo.toFixed(2)}. O miserável é um miserável!`;
   } 

@@ -1,96 +1,3 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const twilio = require("twilio");
-
-const app = express();
-app.use(bodyParser.urlencoded({ extended: false }));
-
-// Banco de dados em memória (simples)
-let saldo = 0;
-let emprestimos = [];
-let transacoes = []; // Para armazenar transações
-
-// Função para agendar cobrança (simples)
-function agendarCobranca(numero, valor, prazoMinutos) {
-  setTimeout(() => {
-    console.log(`⏰ Cobrança: ${numero} deve R$${valor}`);
-  }, prazoMinutos * 60 * 1000);
-}
-
-// Função para gerar relatório semanal
-function gerarRelatorioSemanal() {
-  const transacoesSemana = transacoes.filter(t => {
-    const data = new Date(t.data);
-    const hoje = new Date();
-    const diasPassados = Math.floor((hoje - data) / (1000 * 3600 * 24));
-    return diasPassados <= 7;
-  });
-
-  const totalGasto = transacoesSemana.filter(t => t.tipo === "gasto").reduce((acc, t) => acc + t.valor, 0);
-  const totalInvestido = transacoesSemana.filter(t => t.tipo === "investir").reduce((acc, t) => acc + t.valor, 0);
-  const totalEmprestado = transacoesSemana.filter(t => t.tipo === "emprestimo").reduce((acc, t) => acc + t.valor, 0);
-
-  return `🔔 Relatório Semanal:
-  Gasto total: R$${totalGasto.toFixed(2)}
-  Investido total: R$${totalInvestido.toFixed(2)}
-  Empréstimos totais: R$${totalEmprestado.toFixed(2)}`;
-}
-
-// Função para gerar relatório mensal
-function gerarRelatorioMensal() {
-  const transacoesMes = transacoes.filter(t => {
-    const data = new Date(t.data);
-    const hoje = new Date();
-    return data.getMonth() === hoje.getMonth();
-  });
-
-  const totalGasto = transacoesMes.filter(t => t.tipo === "gasto").reduce((acc, t) => acc + t.valor, 0);
-  const totalInvestido = transacoesMes.filter(t => t.tipo === "investir").reduce((acc, t) => acc + t.valor, 0);
-  const totalEmprestado = transacoesMes.filter(t => t.tipo === "emprestimo").reduce((acc, t) => acc + t.valor, 0);
-
-  return `🔔 Relatório Mensal:
-  Gasto total: R$${totalGasto.toFixed(2)}
-  Investido total: R$${totalInvestido.toFixed(2)}
-  Empréstimos totais: R$${totalEmprestado.toFixed(2)}`;
-}
-
-// Função para gerar relatórios por categoria
-function gerarRelatorioPorCategoria(tipo) {
-  const categorias = {
-    gasto: ["Mercado", "Moto", "Outros", "Lazer"],
-    entrada: ["Extras", "Salario", "Emprestimos Seus", "Emprestimos para Terceiros"]
-  };
-
-  const transacoesFiltradas = transacoes.filter(t => t.tipo === tipo);
-
-  let totalPorCategoria = {};
-
-  // Inicializa as categorias
-  categorias[tipo].forEach(categoria => {
-    totalPorCategoria[categoria] = 0;
-  });
-
-  // Soma os valores por categoria
-  transacoesFiltradas.forEach(t => {
-    if (totalPorCategoria[t.categoria] !== undefined) {
-      totalPorCategoria[t.categoria] += t.valor;
-    }
-  });
-
-  let resposta = `🔔 Relatório de ${tipo === "gasto" ? "Gastos" : "Entradas"} por Categoria:`;
-
-  categorias[tipo].forEach(categoria => {
-    resposta += `\n${categoria}: R$${totalPorCategoria[categoria].toFixed(2)}`;
-  });
-
-  return resposta;
-}
-
-// Rota principal
-app.get("/", (req, res) => {
-  res.send("🔥 Peartree Vegeta Bot está rodando! Prepare-se, verme insolente!");
-});
-
 // Webhook do WhatsApp
 app.post("/webhook", (req, res) => {
   const message = req.body.Body || "";
@@ -100,11 +7,19 @@ app.post("/webhook", (req, res) => {
 
   let resposta = "";
 
-  if (message.toLowerCase().includes("Fala")) {
+  // Verifica se a mensagem inclui o comando de saudação
+  if (message.toLowerCase().includes("fala") || message.toLowerCase().includes("oi")) {
     resposta = "👋 Hmph! Miserável, aqui é o Peartree, seu bot financeiro!";
   } 
   else if (message.toLowerCase().includes("saldo")) {
     resposta = `💰 Seu saldo atual é R$${saldo.toFixed(2)}... verme insolente!`;
+  } 
+  // Verifica se a mensagem inclui um valor numérico associado a "Entrada Salario"
+  else if (/entrada\s*salario\s*(\d+[\.,]?\d*)/.test(message.toLowerCase())) {
+    const valor = parseFloat(message.match(/entrada\s*salario\s*(\d+[\.,]?\d*)/i)[1].replace(',', '.'));
+    saldo += valor;
+    transacoes.push({ tipo: "entrada", categoria: "Salario", valor: valor, data: new Date() });
+    resposta = `💵 Você recebeu um salário de R$${valor.toFixed(2)}. Agora seu saldo é R$${saldo.toFixed(2)}.`;
   } 
   else if (message.toLowerCase().includes("gastei mercado")) {
     saldo -= 50;
@@ -177,10 +92,4 @@ app.post("/webhook", (req, res) => {
 
   res.type("text/xml");
   res.send(twiml.toString());
-});
-
-// Porta
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🔥 Peartree Vegeta Bot rodando na porta ${PORT}`);
 });

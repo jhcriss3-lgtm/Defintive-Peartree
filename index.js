@@ -9,7 +9,7 @@ const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// ===== ENV VARS =====
+// Environment variables (from .env)
 const DATABASE_URL = process.env.DATABASE_URL;
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
@@ -25,7 +25,7 @@ if (!DATABASE_URL) {
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 const client = (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
 
-// ===== INIT DATABASE =====
+// ===== INIT DB =====
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
@@ -60,10 +60,10 @@ async function initDb() {
       created_at TIMESTAMP DEFAULT now()
     );
   `);
-  console.log('✅ DB initialized');
+  console.log('DB initialized');
 }
 
-// ===== VEGETA RESPONSES =====
+// ===== Vegeta responses =====
 function vegetaReplyBase() { return 'Peartree Vegeta: '; }
 
 function randomVegeta(type) {
@@ -92,7 +92,7 @@ function randomVegeta(type) {
   return arr[Math.floor(Math.random()*arr.length)];
 }
 
-// ===== HELPERS =====
+// ===== Helpers =====
 async function getBalance(phone) {
   const res = await pool.query(`
     SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END),0) AS balance
@@ -138,9 +138,10 @@ function extractAmount(text) {
   return parseFloat(m[1].replace(',', '.'));
 }
 
-// ===== WEBHOOK =====
+// ===== Webhook =====
 app.post('/webhook', async (req, res) => {
   try {
+    console.log('Incoming webhook body:', req.body);
     const from = req.body.From || 'whatsapp:unknown';
     const body = req.body.Body || '';
     const phone = from;
@@ -225,7 +226,8 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// ===== CRON JOBS =====
+// ===== Cron jobs =====
+
 // Daily summary 08:00
 cron.schedule('0 8 * * *', async () => {
   try {
@@ -268,4 +270,28 @@ cron.schedule('0 * * * *', async () => {
 // Daily bills reminders 09:00
 cron.schedule('0 9 * * *', async () => {
   try {
-    console.log('Running daily bills reminder job at 09
+    console.log('Running daily bills reminder job at 09:00');
+    const resBills = await pool.query(`SELECT id,phone,description,amount,due_date FROM bills WHERE due_date IS NOT NULL`);
+    const now = new Date();
+    for (const bill of resBills.rows) {
+      const due = new Date(bill.due_date);
+      const diffDays = Math.ceil((due - now)/(1000*60*60*24));
+      if (diffDays >= 0 && diffDays <= 2) {
+        const msg = `${vegetaReplyBase()} Lembrete: ${bill.description} de R$${parseFloat(bill.amount).toFixed(2)} vence em ${diffDays} dia(s).`;
+        await sendWhatsApp(bill.phone, msg);
+      }
+    }
+  } catch (e) {
+    console.error('Bills reminder job error', e);
+  }
+}, { timezone: 'America/Sao_Paulo' });
+
+// ===== Start app =====
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Peartree Vegeta running on port ${PORT}`);
+  });
+}).catch(err => {
+  console.error('DB init failed', err);
+  process.exit(1);
+});
